@@ -21,8 +21,21 @@ function getRef(): string {
     return "direct";
   }
 }
+// Anonymous visitor id (random, stored in this browser only) so repeat visits count once.
+function getVid(): string {
+  try {
+    let v = localStorage.getItem("ur_vid");
+    if (!v) {
+      v = Math.random().toString(36).slice(2) + Date.now().toString(36);
+      localStorage.setItem("ur_vid", v);
+    }
+    return v;
+  } catch {
+    return "anon";
+  }
+}
 function track(event: string, props: Record<string, unknown> = {}) {
-  const payload = { event, ref: getRef(), t: new Date().toISOString(), ...props };
+  const payload = { event, ref: getRef(), vid: getVid(), t: new Date().toISOString(), ...props };
   try {
     (window as any).posthog?.capture(event, payload);
   } catch {}
@@ -37,15 +50,40 @@ function track(event: string, props: Record<string, unknown> = {}) {
   } catch {}
 }
 
+// Shows how many different people have opened and finished the demo.
+// Reads the same Apps Script URL (GET). Hidden if the endpoint is unset or fails.
+function TryCount() {
+  const [c, setC] = useState<{ visitors: number; completed: number } | null>(null);
+  useEffect(() => {
+    if (!WEBHOOK_URL) return;
+    fetch(`${WEBHOOK_URL}?t=${Date.now()}`)
+      .then((r) => r.json())
+      .then((d) => setC({ visitors: d.visitors, completed: d.completed }))
+      .catch(() => {});
+  }, []);
+  if (!c || c.visitors < 1) return null;
+  return (
+    <div className="mb-4 text-center text-xs text-slate-400">
+      {c.visitors} {c.visitors === 1 ? "person has" : "people have"} tried this demo
+      {c.completed > 0 ? `, ${c.completed} finished it` : ""}.
+    </div>
+  );
+}
+
 // ---- helpers --------------------------------------------------------------
 const fmt = (n: number, d = 2) =>
   n.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
-const todayISO = () => new Date().toISOString().slice(0, 10);
+// Local-date helpers (toISOString() uses UTC and can be a day off near midnight).
+const isoLocal = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const todayISO = () => isoLocal(new Date());
 const addMonthsISO = (m: number) => {
   const d = new Date();
   d.setMonth(d.getMonth() + m);
-  return d.toISOString().slice(0, 10);
+  return isoLocal(d);
 };
+const niceDate = (iso: string) =>
+  new Date(iso + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 const daysBetween = (a: string, b: string) =>
   Math.max(0, Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86400000));
 
@@ -114,6 +152,7 @@ export default function DemoFlow() {
         <div className="mb-4 rounded-lg bg-amber-500/15 px-3 py-2 text-xs text-amber-200">
           Demo with practice money. No real money is used.
         </div>
+        <TryCount />
 
         {step === "enter" && (
           <div className="space-y-4">
@@ -157,6 +196,10 @@ export default function DemoFlow() {
                 className="mt-1 w-full rounded-lg bg-slate-700 px-3 py-3 text-lg"
               />
             </label>
+            <p className="text-xs text-slate-400">
+              Practice tenancy: starts today ({niceDate(todayISO())}) and ends on{" "}
+              {endDate ? niceDate(endDate) : "your end date"}.
+            </p>
 
             {valid && (
               <div className="rounded-lg bg-slate-700 p-3 text-sm">
