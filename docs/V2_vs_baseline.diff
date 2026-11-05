@@ -1,0 +1,217 @@
+--- src/contracts/RentDepositVault.sol	2026-11-05 17:54:02.742704086 +0000
++++ src/contracts/RentDepositVaultV2.sol	2026-11-05 17:57:38.397812130 +0000
+@@ -7,11 +7,22 @@
+ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+ import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
+ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
++import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
++import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+ 
+-contract RentDepositVault is
++/// @title RentDepositVaultV2
++/// @notice Copy of RentDepositVault (baseline commit cc5e4ba) with a small diff, built for ETHGlobal Mumbai:
++///   1. Funding guard: a `funded` flag. A rent deposit cannot be funded twice, and cannot be released unless funded.
++///   2. Deposit Passport: `recordCleanTenancy` stores a hash of the evidence bundle kept on Arkiv.
++///   3. `rollover`: moves a cleanly finished tenancy's deposit into a new tenancy in one transaction,
++///      only with an EIP-712 approval signed by `approver` (the human check, done by our World ID backend).
++/// Testnet only. Unaudited. Yield is simulated.
++/// Naming: the code keeps the baseline identifiers (Lease, leaseId); in plain English these are tenancies.
++contract RentDepositVaultV2 is
+     Ownable2Step,
+     Pausable,
+-    ReentrancyGuard
++    ReentrancyGuard,
++    EIP712
+ {
+     using SafeERC20 for IERC20;
+ 
+@@ -70,6 +81,16 @@
+     address public pendingArbiter;
+     uint256 public pendingArbiterTime;
+ 
++    // ---- V2: funding guard and Deposit Passport ----
++    bytes32 public constant ROLLOVER_TYPEHASH = keccak256(
++        "Rollover(address tenant,uint256 oldLeaseId,uint256 newLeaseId,bytes32 passportHash,uint256 nonce,uint256 deadline)"
++    );
++
++    mapping(uint256 => bool) public funded;
++    address public approver;
++    mapping(uint256 => bytes32) public passportHash;
++    mapping(bytes32 => bool) public approvalUsed;
++
+     event LeaseCreated(uint256 indexed leaseId, address indexed tenant, address indexed landlord, uint256 deposit, uint256 startTime, uint256 endTime, uint256 claimDeadline, bytes32 leaseHash);
+     event LeaseFunded(uint256 indexed leaseId, uint256 amount);
+     event LandlordClaimSubmitted(uint256 indexed leaseId, uint256 amount, bytes32 evidenceHash);
+@@ -84,6 +105,9 @@
+     event ArbiterUpdated(address indexed newArbiter);
+     event YieldReserveFunded(uint256 amount);
+     event YieldPaid(uint256 indexed leaseId, address indexed recipient, uint256 amount);
++    event PassportRecorded(uint256 indexed leaseId, address indexed tenant, bytes32 recordHash);
++    event ApproverUpdated(address indexed newApprover);
++    event DepositRolledOver(uint256 indexed oldLeaseId, uint256 indexed newLeaseId, address indexed tenant, uint256 rolled, uint256 yieldPaid, uint256 topUp, uint256 refund);
+ 
+     error InvalidAddress();
+     error InvalidLease();
+@@ -110,6 +134,17 @@
+     error ArbiterChangeNotReady();
+     error InsufficientVaultBalance();
+     error MissingEvidence();
++    error AlreadyFunded();
++    error NotFunded();
++    error NotCleanTenancy();
++    error ReleasePending();
++    error PassportMissing();
++    error PassportAlreadyRecorded();
++    error NewLeaseNotFundable();
++    error WrongTenant();
++    error ApprovalExpired();
++    error ApprovalUsed();
++    error BadApprover();
+ 
+     modifier onlyAgent() {
+         if (msg.sender != aiAgent) revert NotAgent();
+@@ -121,13 +156,18 @@
+         _;
+     }
+ 
+-    constructor(address _usdc, address _aiAgent, address _arbiter) Ownable(msg.sender) {
++    constructor(address _usdc, address _aiAgent, address _arbiter, address _approver)
++        Ownable(msg.sender)
++        EIP712("UltraRentzDepositPassport", "1")
++    {
+         if (_usdc == address(0)) revert InvalidAddress();
+         if (_aiAgent == address(0)) revert InvalidAddress();
+         if (_arbiter == address(0)) revert InvalidAddress();
++        if (_approver == address(0)) revert InvalidAddress(); // V2
+         usdc = IERC20(_usdc);
+         aiAgent = _aiAgent;
+         arbiter = _arbiter;
++        approver = _approver; // V2
+     }
+ 
+     function createLease(address tenant, address landlord, bytes32 leaseHash, uint256 depositAmount, uint256 startTime, uint256 endTime, uint256 claimPeriod) external whenNotPaused nonReentrant returns (uint256 leaseId) {
+@@ -152,6 +192,8 @@
+         if (lease.tenant == address(0)) revert InvalidLease();
+         if (msg.sender != lease.tenant) revert NotTenant();
+         if (lease.status != LeaseStatus.Active) revert LeaseNotActive();
++        if (funded[leaseId]) revert AlreadyFunded(); // V2
++        funded[leaseId] = true; // V2 (effect before the token transfer)
+ 
+         uint256 beforeBalance = usdc.balanceOf(address(this));
+         usdc.safeTransferFrom(msg.sender, address(this), lease.deposit);
+@@ -235,6 +277,7 @@
+         Lease storage lease = leases[leaseId];
+         if (lease.tenant == address(0)) revert InvalidLease();
+         if (lease.status == LeaseStatus.Released) revert AlreadyReleased();
++        if (!funded[leaseId]) revert NotFunded(); // V2
+ 
+         ReleaseRequest storage request = releaseRequests[leaseId];
+         if (request.executeAfter != 0 && !request.executed) revert ReleaseAlreadyRequested();
+@@ -300,6 +343,107 @@
+         }
+     }
+ 
++    // ------------------------------------------------------------------
++    // V2: Deposit Passport and rollover
++    // ------------------------------------------------------------------
++
++    /// @dev Clean = claim window over and the landlord made no claim (same test requestRelease uses).
++    function _isClean(Lease storage lease) internal view returns (bool) {
++        return lease.status != LeaseStatus.Released
++            && block.timestamp >= lease.claimDeadline
++            && lease.claimedAmount == 0;
++    }
++
++    function setApprover(address newApprover) external onlyOwner {
++        if (newApprover == address(0)) revert InvalidAddress();
++        approver = newApprover;
++        emit ApproverUpdated(newApprover);
++    }
++
++    /// @notice The agent records the hash of the evidence bundle (stored on Arkiv) for a cleanly finished tenancy.
++    function recordCleanTenancy(uint256 leaseId, bytes32 recordHash) external onlyAgent whenNotPaused nonReentrant {
++        Lease storage lease = leases[leaseId];
++        if (lease.tenant == address(0)) revert InvalidLease();
++        if (!funded[leaseId]) revert NotFunded();
++        if (!_isClean(lease)) revert NotCleanTenancy();
++        if (releaseRequests[leaseId].executeAfter != 0) revert ReleasePending();
++        if (passportHash[leaseId] != bytes32(0)) revert PassportAlreadyRecorded();
++        if (recordHash == bytes32(0)) revert MissingEvidence();
++
++        passportHash[leaseId] = recordHash;
++        emit PassportRecorded(leaseId, lease.tenant, recordHash);
++    }
++
++    /// @notice EIP-712 digest the approver signs. The backend and the tests both use this.
++    function rolloverDigest(address tenant, uint256 oldLeaseId, uint256 newLeaseId, uint256 nonce, uint256 deadline)
++        public
++        view
++        returns (bytes32)
++    {
++        return _hashTypedDataV4(
++            keccak256(abi.encode(ROLLOVER_TYPEHASH, tenant, oldLeaseId, newLeaseId, passportHash[oldLeaseId], nonce, deadline))
++        );
++    }
++
++    /// @notice Roll the deposit of a cleanly finished tenancy into a new tenancy of the same tenant.
++    /// No USDC leaves the vault for the rolled amount. Needs a fresh approval signed by `approver`.
++    function rollover(uint256 oldLeaseId, uint256 newLeaseId, uint256 deadline, uint256 nonce, bytes calldata signature)
++        external
++        whenNotPaused
++        nonReentrant
++    {
++        Lease storage oldLease = leases[oldLeaseId];
++        Lease storage newLease = leases[newLeaseId];
++
++        if (oldLeaseId == newLeaseId) revert InvalidLease();
++        if (oldLease.tenant == address(0) || newLease.tenant == address(0)) revert InvalidLease();
++        if (msg.sender != oldLease.tenant || msg.sender != newLease.tenant) revert WrongTenant();
++        if (!funded[oldLeaseId]) revert NotFunded();
++        if (!_isClean(oldLease)) revert NotCleanTenancy();
++        if (releaseRequests[oldLeaseId].executeAfter != 0) revert ReleasePending();
++        if (passportHash[oldLeaseId] == bytes32(0)) revert PassportMissing();
++        if (newLease.status != LeaseStatus.Active || funded[newLeaseId]) revert NewLeaseNotFundable();
++        if (block.timestamp > deadline) revert ApprovalExpired();
++
++        bytes32 digest = rolloverDigest(msg.sender, oldLeaseId, newLeaseId, nonce, deadline);
++        if (approvalUsed[digest]) revert ApprovalUsed();
++        (address signer, ECDSA.RecoverError err,) = ECDSA.tryRecover(digest, signature);
++        if (err != ECDSA.RecoverError.NoError || signer != approver) revert BadApprover();
++
++        // effects
++        approvalUsed[digest] = true;
++        oldLease.status = LeaseStatus.Released;
++        funded[newLeaseId] = true;
++
++        uint256 yieldDue = pendingYield(oldLeaseId);
++        if (yieldDue > yieldReserve) yieldDue = yieldReserve;
++        yieldReserve -= yieldDue;
++
++        uint256 oldDeposit = oldLease.deposit;
++        uint256 newDeposit = newLease.deposit;
++        uint256 rolled = newDeposit > oldDeposit ? oldDeposit : newDeposit;
++        uint256 topUp = newDeposit > oldDeposit ? newDeposit - oldDeposit : 0;
++        uint256 refund = oldDeposit > newDeposit ? oldDeposit - newDeposit : 0;
++
++        // interactions
++        if (yieldDue > 0) {
++            usdc.safeTransfer(msg.sender, yieldDue);
++            emit YieldPaid(oldLeaseId, msg.sender, yieldDue);
++        }
++        if (refund > 0) {
++            usdc.safeTransfer(msg.sender, refund);
++            emit DepositReleased(oldLeaseId, msg.sender, refund);
++        }
++        if (topUp > 0) {
++            uint256 beforeBalance = usdc.balanceOf(address(this));
++            usdc.safeTransferFrom(msg.sender, address(this), topUp);
++            if (usdc.balanceOf(address(this)) - beforeBalance != topUp) revert InvalidAmount();
++        }
++
++        emit LeaseFunded(newLeaseId, newDeposit);
++        emit DepositRolledOver(oldLeaseId, newLeaseId, msg.sender, rolled, yieldDue, topUp, refund);
++    }
++
+     function requestAgentChange(address newAgent) external onlyOwner {
+         if (newAgent == address(0)) revert InvalidAddress();
+         pendingAgent = newAgent;
