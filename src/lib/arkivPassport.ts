@@ -4,7 +4,7 @@ import { createPublicClient, createWalletClient, ExpirationTime } from "@arkiv-n
 import { rabdi } from "@arkiv-network/sdk/chains";
 import { eq } from "@arkiv-network/sdk/query";
 import { addr, bytes, defineSchema, str } from "@arkiv-network/sdk/schema";
-import { bytesToString, hexToString, http, keccak256, stringToBytes, type Hex } from "viem";
+import { bytesToString, http, keccak256, stringToBytes, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
 /** One entity type for both kinds of record: kind = "evidence" | "passport". */
@@ -81,11 +81,7 @@ export async function readPassport(accessKey: string, tenancyId: string) {
   const row = rows[rows.length - 1];
   if (!row) return null;
   const raw = row.bundle.value as unknown;
-  // Arkiv returns `bytes` attributes as a 0x-hex string (confirmed on Rabdi, 6 Nov 2026).
-  const json =
-    typeof raw === "string"
-      ? raw.startsWith("0x") ? hexToString(raw as Hex) : raw
-      : bytesToString(raw as Uint8Array);
+  const json = typeof raw === "string" ? raw : bytesToString(raw as Uint8Array);
   return {
     entityKey: row.$key as Hex,
     storedHash: row.recordHash.value as string,

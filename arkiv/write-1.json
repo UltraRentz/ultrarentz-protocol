@@ -1,0 +1,9 @@
+{
+  "writer": "0xdC7e6995Be5810e8B308D602816C9c7837F0600A",
+  "tenancyId": "1",
+  "recordHash": "0xed834e000ad528f6e6e332339e3103f8c227c2fa29e3fdf93a487076214d25cf",
+  "evidenceEntityKey": "0x23c3755e430aea5399bfb5eb028add50541e2edcadaecd72be2394535546b5ca",
+  "passportEntityKey": "0x4f6169a391ea9aab31ec6cc5fe5267b9c8acf6a6f3f049b24c784d7041fbca72",
+  "expiresInDays": 30,
+  "writtenAt": "2026-11-06T05:43:47.475Z"
+}
