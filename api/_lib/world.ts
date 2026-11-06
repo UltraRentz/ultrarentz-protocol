@@ -212,6 +212,6 @@ export function cfgFromEnv(env: Record<string, string | undefined>): Cfg {
     approverKey: need("APPROVER_PRIVATE_KEY") as Hex, rpcUrl: env.ARC_RPC_URL ?? "https://rpc.testnet.arc.network",
     vault: need("VAULT_V2_ADDRESS") as Hex,
     mock: env.WORLD_MOCK === "1",
-    acr: (env.WORLD_ACR ?? "https://world.org/oidc/acr/orb,https://world.org/oidc/acr/selfie").split(",").map((s) => s.trim()).filter(Boolean),
+    acr: /^(any|none)$/i.test((env.WORLD_ACR ?? "").trim()) ? [] : (env.WORLD_ACR ?? "https://world.org/oidc/acr/orb,https://world.org/oidc/acr/selfie").split(",").map((s) => s.trim()).filter(Boolean),
   };
 }
