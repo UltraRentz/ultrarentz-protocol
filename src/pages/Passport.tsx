@@ -241,7 +241,7 @@ export default function Passport() {
         </Card>
 
         {err && <p className="rounded-lg bg-red-500/15 p-3 text-sm text-red-300">{err}</p>}
-        <p className="text-xs text-slate-500">Vault {VAULT}. Testnet only, unaudited. World proofs here use sandbox identities.</p>
+        <p className="text-xs text-slate-500">Vault {VAULT}. Testnet only, unaudited. {isMock ? "The human check here is a labelled MOCK stand-in." : "World proofs here use sandbox identities."}</p>
       </div>
     </div>
   );
