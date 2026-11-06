@@ -5,6 +5,7 @@
   "dependencies": {
     "@account-abstraction/contracts": "^0.8.0",
     "@account-abstraction/sdk": "^0.6.0",
+    "@arkiv-network/sdk": "^1.0.1",
     "@openzeppelin/contracts": "^5.4.0",
     "@particle-network/auth-core-modal": "^1.5.2",
     "@particle-network/chains": "^1.8.3",
@@ -12,6 +13,7 @@
     "connectkit": "^1.9.2",
     "ethers": "^6.15.0",
     "framer-motion": "^12.38.0",
+    "jose": "^6.2.15",
     "lucide-react": "^0.474.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
@@ -28,6 +30,7 @@
     "autoprefixer": "^10.6.2",
     "postcss": "^8.5.32",
     "tailwindcss": "^3.4.19",
+    "tsx": "^4.23.15",
     "typescript": "~5.8.3",
     "vite": "^7.0.3"
   },
