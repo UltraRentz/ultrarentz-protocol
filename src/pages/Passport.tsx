@@ -27,6 +27,7 @@ const erc20Abi = parseAbi([
 ]);
 
 const WORLD_ERRORS: Record<string, string> = {
+  server_error: "The approval service hit an error. No approval was issued. Try again.",
   access_denied: "You declined the human check. No approval was issued and nothing moved.",
   attempt_expired: "The check took too long and expired. No approval was issued. Start again.",
   not_fresh: "That sign-in was not fresh for this transaction. No approval was issued.",
