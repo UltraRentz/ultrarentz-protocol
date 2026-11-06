@@ -37,7 +37,7 @@ const WORLD_ERRORS: Record<string, string> = {
   token_exchange_failed: "World did not confirm the check. No approval was issued.",
   login_required: "A fresh sign-in was required. No approval was issued.",
   no_passport_recorded: "This tenancy has no passport recorded on Arc, so there is nothing to roll over.",
-  not_your_tenancy: "The connected wallet is not the tenant of both tenancies.",
+  not_your_tenancy: "This sign-in is not the tenant of both tenancies.",
   new_tenancy_already_funded: "The new tenancy already has a deposit.",
 };
 const explain = (code: string) => WORLD_ERRORS[code] ?? `The check did not pass (${code}). No approval was issued.`;
@@ -179,7 +179,13 @@ export default function Passport() {
             <h1 className="text-2xl font-bold">Deposit Passport</h1>
             <p className="text-sm text-slate-300">Move your rent deposit to your next tenancy without paying two deposits. Testnet, practice money only.</p>
           </div>
-          <ConnectKitButton />
+          <ConnectKitButton.Custom>
+            {({ show, isConnected, truncatedAddress }) => (
+              <button onClick={show} className="text-xs text-slate-400 underline decoration-dotted hover:text-slate-200">
+                {isConnected ? `Signed in as ${truncatedAddress}` : "Sign in to continue"}
+              </button>
+            )}
+          </ConnectKitButton.Custom>
         </div>
 
         <div className="flex gap-3 text-sm">
@@ -214,7 +220,7 @@ export default function Passport() {
         <Card n={2} title="Human check (World ID)">
           <p className="text-sm text-slate-300">Before the deposit moves, a real person must confirm. Our backend validates the World result and only then signs an approval for this exact rollover.</p>
           <Btn onClick={startWorld} disabled={!address || busy === "world" || noPassport}>{busy === "world" ? "Opening World…" : "Confirm I am a person"}</Btn>
-          {!address && <p className="text-sm text-slate-400">Connect your wallet first.</p>}
+          {!address && <p className="text-sm text-slate-400">Sign in first (top of the page).</p>}
           {isMock && <p className="rounded bg-amber-500 px-2 py-1 text-sm font-bold text-slate-900">MOCK human check: a stand-in while World credentials are pending. Not the official World ID integration.</p>}
           {worldMsg && <p className={`text-sm ${approval ? "text-emerald-400" : "text-amber-300"}`}>{worldMsg}</p>}
         </Card>
