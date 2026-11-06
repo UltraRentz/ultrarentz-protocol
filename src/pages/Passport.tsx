@@ -73,6 +73,7 @@ export default function Passport() {
   const [deposits, setDeposits] = useState<{ old?: bigint; new?: bigint }>({});
   const [approval, setApproval] = useState<Approval | null>(null);
   const [worldMsg, setWorldMsg] = useState("");
+  const [isMock, setIsMock] = useState(false); // true when the human check was the labelled stand-in, not World
   const [busy, setBusy] = useState("");
   const [tx, setTx] = useState<{ approve?: Hex; rollover?: Hex } | null>(null);
   const [err, setErr] = useState("");
@@ -85,9 +86,14 @@ export default function Passport() {
       const a: Approval = { sig: f.get("approval") as Hex, old: f.get("old")!, new: f.get("new")!, nonce: f.get("nonce")!, deadline: f.get("deadline")!, tenant: f.get("tenant")! };
       try { sessionStorage.setItem("ur_approval", JSON.stringify(a)); } catch { /* storage may be blocked */ }
       setApproval(a); setOldId(a.old); setNewId(a.new);
-      setWorldMsg("Human check passed. The backend signed an approval for this rollover only.");
+      const m = f.get("mock") === "1";
+      setIsMock(m);
+      try { sessionStorage.setItem("ur_mock", m ? "1" : "0"); } catch { /* ignore */ }
+      setWorldMsg(m
+        ? "MOCK human check passed. This was a stand-in, not World ID. The backend signed an approval for this rollover only."
+        : "Human check passed. The backend signed an approval for this rollover only.");
     } else {
-      try { const s = sessionStorage.getItem("ur_approval"); if (s) setApproval(JSON.parse(s)); } catch { /* ignore */ }
+      try { const s = sessionStorage.getItem("ur_approval"); if (s) setApproval(JSON.parse(s)); setIsMock(sessionStorage.getItem("ur_mock") === "1"); } catch { /* ignore */ }
     }
     if (window.location.hash) history.replaceState(null, "", window.location.pathname + window.location.search);
   }, []);
@@ -128,7 +134,7 @@ export default function Passport() {
       const r = await fetch(`/api/world-start?tenant=${address}&oldId=${oldId}&newId=${newId}`);
       const j = await r.json();
       if (!j.ok) setWorldMsg(explain(j.error));
-      else window.location.href = j.url;
+      else { if (j.mock) setIsMock(true); window.location.href = j.url; }
     } catch { setErr("Could not reach the approval service."); }
     setBusy("");
   }
@@ -209,6 +215,7 @@ export default function Passport() {
           <p className="text-sm text-slate-300">Before the deposit moves, a real person must confirm. Our backend validates the World result and only then signs an approval for this exact rollover.</p>
           <Btn onClick={startWorld} disabled={!address || busy === "world" || noPassport}>{busy === "world" ? "Opening World…" : "Confirm I am a person"}</Btn>
           {!address && <p className="text-sm text-slate-400">Connect your wallet first.</p>}
+          {isMock && <p className="rounded bg-amber-500 px-2 py-1 text-sm font-bold text-slate-900">MOCK human check: a stand-in while World credentials are pending. Not the official World ID integration.</p>}
           {worldMsg && <p className={`text-sm ${approval ? "text-emerald-400" : "text-amber-300"}`}>{worldMsg}</p>}
         </Card>
 

@@ -22,6 +22,7 @@ export type Cfg = {
   acr: string[]; // acceptable assurance classes; [] disables the check (sandbox only)
   approvalTtlSec?: number; // how long the signed approval is valid
   attemptTtlSec?: number; // how long the World attempt is valid
+  mock?: boolean; // DEMO ONLY: stand-in human check page (no World). Never counts as the official integration.
 };
 
 export type Out =
@@ -114,11 +115,16 @@ export async function start(cfg: Cfg, q: Record<string, string | undefined>): Pr
     return fail(502, "chain_unreachable");
   }
 
-  const d = await discovery(cfg);
   const verifier = b64u(randomBytes(32));
   const nonce = b64u(randomBytes(16));
   const t = now();
   const attempt: Attempt = { tenant: tenant as Hex, oldId: oldId!, newId: newId!, nonce, verifier, startedAt: t, exp: t + (cfg.attemptTtlSec ?? 600) };
+  if (cfg.mock) {
+    const m = new URL(`${cfg.appUrl}/api/world-mock`);
+    m.searchParams.set("state", seal(cfg, attempt));
+    return { kind: "json", status: 200, body: { ok: true, url: m.toString(), mock: true } };
+  }
+  const d = await discovery(cfg);
   const u = new URL(d.authorization_endpoint);
   u.searchParams.set("response_type", "code");
   u.searchParams.set("client_id", cfg.clientId);
@@ -142,8 +148,10 @@ export async function callback(cfg: Cfg, q: Record<string, string | undefined>):
   if (q.error) return back(cfg, { world_error: q.error }); // access_denied, login_required, ... -> no approval
   if (!q.code) return back(cfg, { world_error: "no_code" });
 
-  let claims: Record<string, any>;
-  try {
+  let claims: Record<string, any> = {};
+  if (cfg.mock && q.code === "mock") {
+    // DEMO ONLY. The stand-in page stands for World; no identity is validated. Falls through to signing.
+  } else try {
     const d = await discovery(cfg);
     const tok = await fetch(d.token_endpoint, {
       method: "POST",
@@ -167,12 +175,15 @@ export async function callback(cfg: Cfg, q: Record<string, string | undefined>):
     return back(cfg, { world_error: "id_token_invalid" });
   }
 
-  if (claims.nonce !== a.nonce) return back(cfg, { world_error: "nonce_mismatch" });
-  if (typeof claims.sub !== "string" || !claims.sub) return back(cfg, { world_error: "no_subject" });
-  // max_age=0: the authentication must belong to THIS attempt (began after it started, not in the future).
-  const authTime = Number(claims.auth_time);
-  if (!Number.isFinite(authTime) || authTime < a.startedAt - 30 || authTime > now() + 30) return back(cfg, { world_error: "not_fresh" });
-  if (cfg.acr.length && !cfg.acr.includes(String(claims.acr))) return back(cfg, { world_error: "assurance_too_low" });
+  const isMock = !!cfg.mock && q.code === "mock";
+  if (!isMock) {
+    if (claims.nonce !== a.nonce) return back(cfg, { world_error: "nonce_mismatch" });
+    if (typeof claims.sub !== "string" || !claims.sub) return back(cfg, { world_error: "no_subject" });
+    // max_age=0: the authentication must belong to THIS attempt (began after it started, not in the future).
+    const authTime = Number(claims.auth_time);
+    if (!Number.isFinite(authTime) || authTime < a.startedAt - 30 || authTime > now() + 30) return back(cfg, { world_error: "not_fresh" });
+    if (cfg.acr.length && !cfg.acr.includes(String(claims.acr))) return back(cfg, { world_error: "assurance_too_low" });
+  }
 
   // Every check passed: build and sign the approval.
   try {
@@ -183,7 +194,7 @@ export async function callback(cfg: Cfg, q: Record<string, string | undefined>):
       args: [a.tenant, BigInt(a.oldId), BigInt(a.newId), nonce, deadline],
     })) as Hex;
     const sig = serializeSignature(await sign({ hash: digest, privateKey: cfg.approverKey }));
-    return back(cfg, { approval: sig, old: a.oldId, new: a.newId, nonce: nonce.toString(), deadline: deadline.toString(), tenant: a.tenant });
+    return back(cfg, { approval: sig, old: a.oldId, new: a.newId, nonce: nonce.toString(), deadline: deadline.toString(), tenant: a.tenant, ...(isMock ? { mock: "1" } : {}) });
   } catch {
     return back(cfg, { world_error: "signing_failed" });
   }
@@ -195,10 +206,12 @@ export function cfgFromEnv(env: Record<string, string | undefined>): Cfg {
   const need = (k: string) => { const v = env[k]; if (!v) throw new Error(`missing env ${k}`); return v; };
   return {
     issuer: env.WORLD_ISSUER ?? "https://auth.world.org",
-    clientId: need("WORLD_CLIENT_ID"), clientSecret: need("WORLD_CLIENT_SECRET"),
+    clientId: env.WORLD_MOCK === "1" ? (env.WORLD_CLIENT_ID ?? "mock") : need("WORLD_CLIENT_ID"),
+    clientSecret: env.WORLD_MOCK === "1" ? (env.WORLD_CLIENT_SECRET ?? "mock") : need("WORLD_CLIENT_SECRET"),
     appUrl: need("APP_URL").replace(/\/$/, ""), stateSecret: need("STATE_SECRET"),
     approverKey: need("APPROVER_PRIVATE_KEY") as Hex, rpcUrl: env.ARC_RPC_URL ?? "https://rpc.testnet.arc.network",
     vault: need("VAULT_V2_ADDRESS") as Hex,
+    mock: env.WORLD_MOCK === "1",
     acr: (env.WORLD_ACR ?? "https://world.org/oidc/acr/orb,https://world.org/oidc/acr/selfie").split(",").map((s) => s.trim()).filter(Boolean),
   };
 }

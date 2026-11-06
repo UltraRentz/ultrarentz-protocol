@@ -20,3 +20,13 @@
 **Missing capability / highest-impact improvement.** A minimal end-to-end example (server code, about 60 lines) of "human approves one specific action, backend verifies, action runs once", with the exact error codes for cancelled and expired.
 
 **Honest limits.** Proofs in the sandbox use fake identities and must not be relied on in production. The approver key is a single hot key in this hackathon build. The assurance level accepted is set by configuration (`WORLD_ACR`); sandbox identities may need it relaxed for the demo, which will be stated here if used: `<fill in>`.
+
+
+## Mock human check (disclosure)
+
+World client credentials were not available during the hackathon (the developer portal returned `account_not_eligible` and partner staff had not yet enabled the team). To keep the Passport flow demonstrable, the backend has a clearly labelled mock mode, switched on only by the environment variable `WORLD_MOCK=1`.
+
+- The mock page says "MOCK: stand-in for World ID. Not a real identity check." and the Passport page shows a visible MOCK banner.
+- It is **not** the official World ID Agent Pass integration and should not be judged as one.
+- The real path (OIDC authorization code with PKCE, fresh sign-in, ID token validation, then signing) is implemented and tested against a local stand-in identity provider; it has not been run against World's live service.
+- Switch the mock off by removing `WORLD_MOCK` and setting `WORLD_CLIENT_ID` and `WORLD_CLIENT_SECRET`.
