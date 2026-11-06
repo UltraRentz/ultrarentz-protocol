@@ -246,7 +246,12 @@ export default function DemoFlow() {
             </div>
             <div className="text-xs text-slate-400">
               {Math.round(progress * days)} of {days} days of your tenancy
+              {progress > 0 && progress < 1 ? " (fast-forwarded)" : ""}
             </div>
+            <p className="text-xs text-slate-400">
+              Practice rate: {Math.round(APY * 100)}% a year, simple interest (deposit × 5% × days ÷
+              365). This is an illustration, not a real return or a promise.
+            </p>
 
             {progress === 0 && (
               <button

@@ -9,8 +9,8 @@
 
 | Item | Description |
 |---|---|
-| `RentDepositVault.sol` | Lease-scoped USDC escrow: create, fund, claim, dispute, release. Simple 5% APY yield, simulated and paid from an owner-funded reserve. Two-step release with a 1-hour delay. Landlord claims need an evidence hash. An arbiter resolves disputes. |
-| Arc testnet deployment | Vault `0xDc7F1A35181C2d607F79616Ab48D81d1144d9244`. Deploy tx `0x58b769ae359c6b9f1f51f24c55fce35908392e1f40d077f0aa56610e1a293304`. Lease #1 created and funded with 10 test USDC: tx `0x6e46df559352eb9bb2a4eae70aa45f86007cc1f193f13e1f317c5ec820710c26`. |
+| `RentDepositVault.sol` | USDC escrow for one tenancy's rent deposit: create, fund, claim, dispute, release. Simple 5% APY yield, simulated and paid from an owner-funded reserve. Two-step release with a 1-hour delay. Landlord claims need an evidence hash. An arbiter resolves disputes. |
+| Arc testnet deployment | Vault `0xDc7F1A35181C2d607F79616Ab48D81d1144d9244`. Deploy tx `0x58b769ae359c6b9f1f51f24c55fce35908392e1f40d077f0aa56610e1a293304`. Tenancy #1 created and funded with 10 test USDC: tx `0x6e46df559352eb9bb2a4eae70aa45f86007cc1f193f13e1f317c5ec820710c26`. |
 | Flare Coston2 deployment | The same contract, unmodified, deployed with FXRP: vault `0x0e86AA71fF2940F225a09307D54d28B47Dde1E49`. Built for an earlier hackathon (branch `xrent` of `UltraRentz/UltraRentz-MVP`). |
 | `scripts/DeployVault.s.sol` | Foundry deployment script. |
 | `RentPaymentFlow.tsx` | On-chain React flow (ethers.js): fund, yield ticker, request and execute release. |
@@ -23,7 +23,7 @@
 
 | Feature | Partner | Status |
 |---|---|---|
-| Deposit Passport (rollover of a deposit to a new tenancy, gated by dispute records) | Arc | [ ] |
+| Deposit Passport contract `RentDepositVaultV2.sol`: funding guard, `recordCleanTenancy`, signed `rollover` to a new tenancy; 37 Foundry tests. `diff` against the baseline file shows exactly what changed. | Arc | Deployed on Arc testnet: vault `0xa79059db1cD0f5220959B484B89993b04b0E7578`, deploy tx `0x3ad8a293a56e5c62ef259f64cdaf8d25bfe4b789e0616a0354bd76981b039dc1` (5 Nov 2026). Owner, agent and arbiter: `0x63f5D788AB1669d81C8BAF79281C7519Fc105E45`; approver: `0x43E71B0073Be90950Bb1003AE136626f4A1cD91e`. |
 | Evidence and passport records on Arkiv, with a "Verify from Arkiv" check against the hash on Arc | Arkiv | [ ] |
 | World ID human check before a claim or a passport transfer | World | [ ] |
 
