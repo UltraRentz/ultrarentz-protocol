@@ -14,6 +14,16 @@ Built solo at ETHGlobal Mumbai 2026, Continuity track. Practice money on testnet
 
 A tenant pays a rent deposit, typically about five weeks of rent. It sits idle for the length of the tenancy, earns the tenant nothing, and is often hard to get back. When the tenant moves, their good history with the old landlord is not portable: the new landlord asks for a fresh deposit and a fresh reference, and the tenant starts from zero.
 
+## The evidence
+
+Figures below come from the articles linked, with their dates. Where a number comes from a campaign group's research, it is an estimate, not an official statistic.
+
+- **England and Wales:** £5.37bn is held in protected deposits. Renters get about £17m a year in interest today, against an estimated £169m if the money earned market rates. 22% of renters in a survey of 2,000 report unfair deductions, but only 4% used the formal dispute process. The same group estimates that moving a deposit from one tenancy to the next ("deposit passporting") would cut upfront moving costs by £817 on average. Source: Generation Rent press releases of [25 Jul 2025](https://www.generationrent.org/2025/07/25/), [21 Jul 2025](https://www.generationrent.org/2025/07/21/flaws-in-deposit-protection-cost-1-in-5-private-renters-hundreds-of-pounds-press-release/) and [24 Sep 2026](https://www.generationrent.org/2026/09/24/) (the 17,000-signature petition).
+- **England and Wales (survey):** 38.2% of 860 tenants did not know they can formally challenge a deduction. Source: LRG study via [Landlord Today, 28 Oct 2026](https://www.landlordtoday.co.uk/breaking-news/2026/10/many-tenants-ignorant-about-deposit-reductions/).
+- **India:** ₹1.26 lakh crore is locked in rental security deposits across six metros, including ₹41,156 crore in Mumbai-MMR. Source: [Business Today, 8 Sep 2026](https://www.businesstoday.in/personal-finance/story/rs1-26-lakh-crore-in-rental-deposits-how-verified-data-could-transform-indias-housing-market-553799-2026-09-08). India Today (16 Jul 2026) reported over ₹1 lakh crore tied up, often 3 to 10 months of advance rent.
+- **Netherlands:** more than 200 Amsterdam tenants reported not getting a full deposit back in a year. Source: !WOON via [NL Times, 10 Mar 2026](https://nltimes.nl/2026/03/10/tenants-increasingly-struggle-recover-deposits-rental-rights-group-warns) and [IamExpat, 11 Mar 2026](https://www.iamexpat.nl/housing/property-news/international-tenants-more-likely-lose-rental-deposits-netherlands).
+- **Ireland:** the housing charity Threshold says thousands of renters have lost their deposit unfairly. Source: [Threshold](https://threshold.ie/deposit-unfairly-retained-across-ireland/).
+
 ## What UltraRentz does
 
 1. **The deposit earns interest.** The tenant's deposit is held in a smart contract on Arc. Interest accrues to the tenant (simple interest, 5% a year in the demo, paid from a funded reserve).
@@ -71,15 +81,15 @@ A diff of the contract against the baseline is in [`docs/V2_vs_baseline.diff`](d
 
 Evidence and the passport summary are stored as Arkiv entities with indexed attributes, so any party can look up a tenancy's record and re-check it against the hash on Arc.
 
-- Writer address (owner of the records): `0xdC7e6995Be5810e8B308D602816C9c7837F0600A`
-- Runnable query (replace nothing, it works as is once dependencies are installed):
+- Writer addresses (owners of the records): `0x86ac2901a4b258CF149dcD5De16DC8aE274d8FAb` wrote the live demo records (tenancy 3); `0xdC7e6995Be5810e8B308D602816C9c7837F0600A` wrote the earlier records (tenancy 1).
+- Runnable query (no access key needed in our tests):
 
 ```bash
 npm install
-npx tsx scripts/arkiv-read.ts
+TENANCY_ID=3 npx tsx scripts/arkiv-read.ts
 ```
 
-The script reads the passport for tenancy 1 from Arkiv, recomputes `keccak256` of the stored JSON, and compares it with the hash recorded on Arc.
+The script reads the passport for tenancy 3 from Arkiv, recomputes `keccak256` of the stored JSON, and compares it with the hash recorded on Arc.
 
 - Records expire after 30 days by design (they are personal data about a tenancy).
 - Submission files: [`arkiv/schema.md`](arkiv/schema.md), [`arkiv/friction.md`](arkiv/friction.md), [`arkiv/reach.md`](arkiv/reach.md), [`arkiv/why-arkiv.md`](arkiv/why-arkiv.md), [`arkiv/how-you-use-arkiv.md`](arkiv/how-you-use-arkiv.md).
@@ -88,7 +98,7 @@ The script reads the passport for tenancy 1 from Arkiv, recomputes `keccak256` o
 
 The rollover is gated on a person confirming. The backend implements the OIDC step-up flow (PKCE S256, fresh sign-in with `max_age=0`, essential `acr`, nonce, validation of the ID token) and signs an EIP-712 approval only after every check passes. The denied, expired and tampered paths issue no approval.
 
-**Honest status.** World client credentials were not available during the hackathon (the developer portal returned `account_not_eligible`). The real flow is implemented and tested against a local stand-in identity provider, but it has **not** been run against World's live service. For the demo, the backend has a clearly labelled **MOCK human check** (`WORLD_MOCK=1`). The mock page and the Passport page both say MOCK on screen. It is not the official World ID integration and should not be judged as one. Details: [`docs/WORLD_DEBRIEF.md`](docs/WORLD_DEBRIEF.md).
+**Honest status.** The World portal first returned `account_not_eligible` for a Gmail account; it needs a Google account on its own domain. After registering the app with a company-domain account (accepted level: any account), the sandbox app could not issue a test World ID: “v4 protocol and credential issuance must both be enabled for this account”, a setting only World can enable. The real flow is implemented and tested against a local stand-in identity provider (22 checks), and our server builds a valid World authorize request, but a real sign-in has **not** completed against World's live service. For the demo, the backend has a clearly labelled **MOCK human check** (`WORLD_MOCK=1`). The mock page and the Passport page both say MOCK on screen. It is not the official World ID integration and should not be judged as one. Details: [`docs/WORLD_DEBRIEF.md`](docs/WORLD_DEBRIEF.md).
 
 ## What is real and what is not
 
@@ -114,6 +124,10 @@ forge test
 ```
 
 Environment variables (server): `ARC_RPC_URL`, `VAULT_V2_ADDRESS`, `APP_URL`, `STATE_SECRET`, `APPROVER_PRIVATE_KEY`, and either `WORLD_MOCK=1` or `WORLD_CLIENT_ID` and `WORLD_CLIENT_SECRET`. Client: `VITE_VAULT_V2_ADDRESS`, `VITE_ARKIV_ACCESS_KEY`, `VITE_DEMO_OLD_ID`, `VITE_DEMO_NEW_ID`.
+
+## Demo data
+
+The live demo uses tenancy **3** (clean, its record on Arkiv and its hash on Arc) and tenancy **4** (unfunded, the rollover target). Tenancies 1 and 2 show an earlier completed rollover: [transaction on Arc testnet](https://testnet.arcscan.app/tx/0x1c5bfeed065e1557b06a58d202d16c14305cc647514b4c6193f0b55aff6e1ba0).
 
 ## Roadmap
 

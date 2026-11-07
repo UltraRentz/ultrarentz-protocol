@@ -7,9 +7,9 @@
 2. The person completes the check at World.
 3. `/api/world-callback` validates `state`, redeems the code once, verifies the ID token (RS256 signature from the issuer's JWKS, issuer, audience, nonce, `auth_time` fresh for this attempt, `acr` in the accepted list) and signs the approval only if everything passes. Secrets stay on the server.
 
-**Denied, expired and failed paths (tested, 17 automated checks against a mock identity provider and a local chain).** Denied by the person, expired attempt, tampered state, token endpoint refusal, wrong nonce, stale authentication, insufficient credential, ID token signed by another key, ID token for another audience: in every case no approval is issued and nothing moves. A valid approval is useless to a different wallet and cannot be replayed.
+**Denied, expired and failed paths (tested, 22 automated checks against a mock identity provider and a local chain).** Denied by the person, expired attempt, tampered state, token endpoint refusal, wrong nonce, stale authentication, insufficient credential, ID token signed by another key, ID token for another audience: in every case no approval is issued and nothing moves. A valid approval is useless to a different wallet and cannot be replayed.
 
-**Time to first success.** `<fill in after the live run: minutes from account creation to the first real approved rollover>`
+**Time to first success.** No live approval was completed. We reached the World portal only after learning that it needs a Google account on its own domain (not @gmail.com), then registered the app within minutes. The sandbox app's “Sandbox verification” failed with: “v4 protocol and credential issuance must both be enabled for this account”, a setting only World can enable. Time spent from first portal attempt to that error: most of a day, mainly on the account-eligibility step.
 
 **Friction found while reading the docs (5 Nov 2026).**
 - The prize page says "Agent Pass", but the docs are under "World ID for authentication" with no page titled Agent Pass; it took several pages (overview, getting-started, step-up, app-registration) to find the flow.
@@ -19,12 +19,12 @@
 
 **Missing capability / highest-impact improvement.** A minimal end-to-end example (server code, about 60 lines) of "human approves one specific action, backend verifies, action runs once", with the exact error codes for cancelled and expired.
 
-**Honest limits.** Proofs in the sandbox use fake identities and must not be relied on in production. The approver key is a single hot key in this hackathon build. The assurance level accepted is set by configuration (`WORLD_ACR`); sandbox identities may need it relaxed for the demo, which will be stated here if used: `<fill in>`.
+**Honest limits.** Proofs in the sandbox use fake identities and must not be relied on in production. The approver key is a single hot key in this hackathon build. The assurance level accepted is set by configuration (`WORLD_ACR`); sandbox identities may need it relaxed for the demo, The portal app is registered with “Any account” as the accepted level and `WORLD_ACR=any` in our configuration. No real sign-in reached our callback, so no `acr` value was observed.
 
 
 ## Mock human check (disclosure)
 
-World client credentials were not available during the hackathon (the developer portal returned `account_not_eligible` and partner staff had not yet enabled the team). To keep the Passport flow demonstrable, the backend has a clearly labelled mock mode, switched on only by the environment variable `WORLD_MOCK=1`.
+World client credentials were first blocked by `account_not_eligible` (a Gmail account was not accepted), and after registering the app with a company-domain account, the sandbox World ID could not be created because of the “v4 protocol and credential issuance” error above. To keep the Passport flow demonstrable, the backend has a clearly labelled mock mode, switched on only by the environment variable `WORLD_MOCK=1`.
 
 - The mock page says "MOCK: stand-in for World ID. Not a real identity check." and the Passport page shows a visible MOCK banner.
 - It is **not** the official World ID Agent Pass integration and should not be judged as one.

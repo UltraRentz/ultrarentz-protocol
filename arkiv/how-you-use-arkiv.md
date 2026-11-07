@@ -17,6 +17,6 @@
 
 **Runnable query for judges:**
 ```
-TENANCY_ID=<id> ARKIV_ACCESS_KEY=<your free key> npx tsx scripts/arkiv-read.ts
+TENANCY_ID=3 npx tsx scripts/arkiv-read.ts   # an access key (ARKIV_ACCESS_KEY) is optional; reads worked without one
 ```
 Prints the entity key, stored hash, re-computed hash and whether they match.

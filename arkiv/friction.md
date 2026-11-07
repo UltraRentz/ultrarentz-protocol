@@ -1,13 +1,11 @@
 # Friction (feedback for Arkiv)
 
-Observed while integrating `@arkiv-network/sdk@1.0.1` on 5 November 2026. Reproducible steps for each.
+Observed while integrating `@arkiv-network/sdk@1.0.1` on 5 and 6 November 2026. Reproducible steps for each.
 
 1. **Old doc URLs return only a redirect notice.** Opening `https://docs.arkiv.network/start-here/installation/` and `https://docs.arkiv.network/typescript-sdk/querying-data/` returns "Redirecting from … to …" with no content for a non-browser fetch. Search engines still list the old URLs. *Fix:* serve a real HTTP 301, or keep a stub page with the content.
 2. **Setup information is split across several pages.** The first-entity page has the install command, `rabdi()` and the faucet, but the RPC URL and chain id are on a separate "networks/rabdi" page, and client setup for reads is on another page ("Connect to Arkiv"). A new user needs three pages to do one write and one read. *Fix:* one quick-start with write + read + RPC + faucet.
 3. **Expiry option naming differs between pages and search snippets.** Some results mention `expiresIn`; the current docs use `expiration: ExpirationTime.fromDays(n)`. *Reproduce:* search "Arkiv createEntity expiresIn". *Fix:* one name, with a note on the old one.
-4. **Reading `bytes` attributes.** The docs show reading strings (`row.title.value`) but not what a `bytes()` attribute returns on read (hex string or `Uint8Array`). We handle both in `readPassport`. *Fix:* add a read example for `bytes()`.
+4. **Reading `bytes` attributes.** The docs show reading strings (`row.title.value`) but not what a `bytes()` attribute returns on read. In Node it came back as a `0x…` hex string, so `JSON.parse` failed with `Unexpected non-whitespace character after JSON at position 1`. In the browser the same value reached our code in a different shape and needed a second decode step. `readPassport` now handles a hex string, a `Uint8Array` and hex text inside bytes. *Fix:* add a read example for `bytes()` that states what comes back.
+5. **Faucet amount and cooldown are not on the docs page.** The faucet at `hub.arkiv.network/faucet` gave 10 tGLM and a 1-hour cooldown per wallet, but the documentation does not say either. *Fix:* state amount and cooldown next to the faucet link.
 
-**TO ADD AFTER THE LIVE RUN (founder to fill in from the real terminal output):**
-- time from `npm install` to first successful write: `<minutes>`
-- faucet and access-key steps: what worked / what did not
-- any error messages, with the exact text and the command that produced them
+**What worked.** Writing the evidence and passport entities, reading them back by indexed `tenancyId`, and re-hashing the stored bytes to match the hash on Arc all worked on the Rabdi testnet. An access key was not needed for our reads or writes. We did not measure the time from `npm install` to the first write, so we do not report one.
